@@ -42,6 +42,10 @@ uint64_t currency_convert(uint64_t amount, Currency from, Currency to) {
     uint64_t to_rate = currency_value(to);
     if (from_rate == 0 || to_rate == 0) return 0;
 
+    if (amount > UINT64_MAX / from_rate) {
+        return 0; // Arithmetic overflow prevention
+    }
+
     return (amount * from_rate) / to_rate;
 }
 

@@ -6,10 +6,29 @@
 #include "error.h"
 #include "validate.h"
 
+static void secure_zero_memory(void* ptr, size_t size) {
+    if (ptr == nullptr) return;
+    volatile unsigned char* p = (volatile unsigned char*)ptr;
+    while (size--) {
+        *p++ = 0;
+    }
+}
+
+static bool secure_str_equals(const char* a, const char* b) {
+    if (a == nullptr || b == nullptr) return false;
+    size_t len_a = strlen(a);
+    size_t len_b = strlen(b);
+    unsigned char diff = (unsigned char)(len_a ^ len_b);
+    for (size_t i = 0; i < len_a && i < len_b; ++i) {
+        diff |= (unsigned char)(a[i] ^ b[i]);
+    }
+    return diff == 0;
+}
+
 void clear_customer(Customer* customer) {
     if (customer == nullptr) return;
 
-    memset(customer, 0, sizeof(Customer));
+    secure_zero_memory(customer, sizeof(Customer));
 
     customer->account_type = ACCOUNT_NONE;
     customer->currency = CURRENCY_TRY;
@@ -256,10 +275,12 @@ bool customer_verify_password(const Customer* customer, const char* raw_password
         if (password_hash(raw_password, hashed, sizeof(hashed)) != CBANK_OK) {
             return false;
         }
-        return strcmp(customer->password, hashed) == 0;
+        bool ok = secure_str_equals(customer->password, hashed);
+        secure_zero_memory(hashed, sizeof(hashed));
+        return ok;
     }
 
-    return strcmp(customer->password, raw_password) == 0;
+    return secure_str_equals(customer->password, raw_password);
 }
 
 Customer* customer_authenticate(Node* head, const char* tc_or_id, const char* raw_password) {
@@ -378,6 +399,7 @@ CbankResult customer_list_remove_by_id(Node** head, uint32_t customer_id) {
             } else {
                 prev->next = curr->next;
             }
+            secure_zero_memory(&curr->customer, sizeof(Customer));
             free(curr);
             return CBANK_OK;
         }
@@ -394,6 +416,7 @@ void customer_list_free(Node** head) {
     Node* curr = *head;
     while (curr != nullptr) {
         Node* next = curr->next;
+        secure_zero_memory(&curr->customer, sizeof(Customer));
         free(curr);
         curr = next;
     }
@@ -438,7 +461,11 @@ static const uint32_t CBANK_DB_VERSION = 1U;
 CbankResult customer_list_save(const Node* head, const char* filepath) {
     if (filepath == nullptr) return CBANK_ERR_NULL;
 
-    FILE* fp = fopen(filepath, "wb");
+    char tmp_filepath[512];
+    int written = snprintf(tmp_filepath, sizeof(tmp_filepath), "%s.tmp", filepath);
+    if (written < 0 || (size_t)written >= sizeof(tmp_filepath)) return CBANK_ERR_FORMAT;
+
+    FILE* fp = fopen(tmp_filepath, "wb");
     if (fp == nullptr) return CBANK_ERR_IO;
 
     uint32_t count = (uint32_t)customer_list_count(head);
@@ -446,17 +473,31 @@ CbankResult customer_list_save(const Node* head, const char* filepath) {
         fwrite(&CBANK_DB_VERSION, sizeof(uint32_t), 1, fp) != 1 ||
         fwrite(&count, sizeof(uint32_t), 1, fp) != 1) {
         fclose(fp);
+        remove(tmp_filepath);
         return CBANK_ERR_IO;
     }
 
     for (const Node* curr = head; curr != nullptr; curr = curr->next) {
         if (fwrite(&curr->customer, sizeof(Customer), 1, fp) != 1) {
             fclose(fp);
+            remove(tmp_filepath);
             return CBANK_ERR_IO;
         }
     }
 
+    if (fflush(fp) != 0) {
+        fclose(fp);
+        remove(tmp_filepath);
+        return CBANK_ERR_IO;
+    }
+
     fclose(fp);
+
+    remove(filepath);
+    if (rename(tmp_filepath, filepath) != 0) {
+        return CBANK_ERR_IO;
+    }
+
     return CBANK_OK;
 }
 
@@ -465,6 +506,20 @@ CbankResult customer_list_load(Node** head, const char* filepath) {
 
     FILE* fp = fopen(filepath, "rb");
     if (fp == nullptr) return CBANK_ERR_NOT_FOUND;
+
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        fclose(fp);
+        return CBANK_ERR_IO;
+    }
+    long file_size = ftell(fp);
+    if (file_size < (long)(3 * sizeof(uint32_t))) {
+        fclose(fp);
+        return CBANK_ERR_FORMAT;
+    }
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        fclose(fp);
+        return CBANK_ERR_IO;
+    }
 
     uint32_t magic = 0;
     uint32_t version = 0;
@@ -477,10 +532,18 @@ CbankResult customer_list_load(Node** head, const char* filepath) {
         return CBANK_ERR_IO;
     }
 
-    if (magic != CBANK_DB_MAGIC || version != CBANK_DB_VERSION) {
+    if (magic != CBANK_DB_MAGIC || version != CBANK_DB_VERSION || count > 100000) {
         fclose(fp);
         return CBANK_ERR_FORMAT;
     }
+
+    long expected_size = (long)(3 * sizeof(uint32_t) + (size_t)count * sizeof(Customer));
+    if (file_size < expected_size) {
+        fclose(fp);
+        return CBANK_ERR_FORMAT;
+    }
+
+    customer_list_free(head);
 
     for (uint32_t i = 0; i < count; ++i) {
         Customer temp;

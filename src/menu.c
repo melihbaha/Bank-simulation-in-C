@@ -29,7 +29,11 @@ static void menu_register_customer(Node** head) {
     char buf[256];
     while (true) {
         printf("Ad Soyad: ");
-        if (!input_read_string(buf, sizeof(buf))) return;
+        if (!input_read_string(buf, sizeof(buf))) {
+            if (feof(stdin)) return;
+            printf("[HATA] Gecersiz giris.\n");
+            continue;
+        }
         CbankResult res = customer_set_name(&new_cust, buf);
         if (res == CBANK_OK) break;
         print_Result(res);
@@ -37,7 +41,11 @@ static void menu_register_customer(Node** head) {
 
     while (true) {
         printf("T.C. Kimlik No (11 hane): ");
-        if (!input_read_string(buf, sizeof(buf))) return;
+        if (!input_read_string(buf, sizeof(buf))) {
+            if (feof(stdin)) return;
+            printf("[HATA] Gecersiz giris.\n");
+            continue;
+        }
         if (customer_list_find_by_tc(*head, buf) != nullptr) {
             print_Result(CBANK_ERR_DUPLICATE);
             continue;
@@ -48,9 +56,14 @@ static void menu_register_customer(Node** head) {
     }
 
     while (true) {
-        printf("Sifre Belirleyin: ");
-        if (!input_read_password(buf, sizeof(buf))) return;
+        printf("Sifre Belirleyin (en az 4 karakter): ");
+        if (!input_read_password(buf, sizeof(buf))) {
+            if (feof(stdin)) return;
+            printf("[HATA] Gecersiz giris.\n");
+            continue;
+        }
         CbankResult res = customer_set_password_hashed(&new_cust, buf);
+        memset(buf, 0, sizeof(buf));
         if (res == CBANK_OK) break;
         print_Result(res);
     }
@@ -270,21 +283,30 @@ void menu_customer_dashboard(Node** head, Customer* current_customer) {
 
             case 9: {
                 char new_pass[CUSTOMER_PASSWORD_LEN];
-                printf("Yeni Sifreniz: ");
+                printf("Yeni Sifreniz (en az 4 karakter): ");
                 if (!input_read_password(new_pass, sizeof(new_pass))) break;
                 CbankResult res = customer_set_password_hashed(current_customer, new_pass);
                 print_Result(res);
                 if (res == CBANK_OK) customer_list_save(*head, CBANK_DEFAULT_DB_FILE);
+                memset(new_pass, 0, sizeof(new_pass));
                 break;
             }
 
             case 10: {
+                char confirm_buf[16];
+                printf("DUR: Hesabinizi kalici olarak kapatmak istediginize emin misiniz? (E/H): ");
+                if (!input_read_string(confirm_buf, sizeof(confirm_buf))) break;
+                if (confirm_buf[0] != 'E' && confirm_buf[0] != 'e') {
+                    printf("Hesap kapatma islemi iptal edildi.\n");
+                    break;
+                }
+
                 uint32_t id = current_customer->customer_id;
                 CbankResult res = customer_list_remove_by_id(head, id);
                 print_Result(res);
                 if (res == CBANK_OK) {
                     customer_list_save(*head, CBANK_DEFAULT_DB_FILE);
-                    printf("Hesabiniz kapatildi. Ana menuye donuluyor.\n");
+                    printf("Hesabiniz basariyla kapatildi. Ana menuye donuluyor.\n");
                     return;
                 }
                 break;
@@ -436,14 +458,26 @@ int menu_run_self_tests(void) {
         p_c1->balance != 2500 || p_c2->balance != 1500 ||
         bank_take_loan(p_c1, 1000) != CBANK_OK ||
         bank_pay_debt(p_c1, 600) != CBANK_OK ||
-        p_c1->debt != 400 || p_c1->balance != 2900) {
+        p_c1->debt != 400 || p_c1->balance != 2900 ||
+        bank_transfer(test_head, p_c1, iban1, 100) != CBANK_ERR_DUPLICATE) {
         printf(" [FAIL] Finansal islemler (Yatirma/Cekme/Transfer/Kredi) testi.\n");
         failures++;
     } else {
         printf(" [PASS] Finansal islemler (Yatirma/Cekme/Transfer/Kredi) testi.\n");
     }
 
-    // 5. Persistence Save & Load Test
+    // 5. Security & Boundary Edge Cases Test
+    if (password_validate("123") != CBANK_ERR_LENGTH ||
+        name_validate("   ") != CBANK_ERR_EMPTY ||
+        name_validate("Ahmet\n123") != CBANK_ERR_FORMAT ||
+        currency_convert(UINT64_MAX, CURRENCY_USD, CURRENCY_TRY) != 0) {
+        printf(" [FAIL] Guvenlik ve sinir durumlari (Boundary / Overflow) testi.\n");
+        failures++;
+    } else {
+        printf(" [PASS] Guvenlik ve sinir durumlari (Boundary / Overflow / Sanitization) testi.\n");
+    }
+
+    // 6. Persistence Save & Load Test
     const char* test_db = "cbank_test_temp.dat";
     if (customer_list_save(test_head, test_db) != CBANK_OK) {
         printf(" [FAIL] Dosya kaydetme testi.\n");
@@ -509,6 +543,7 @@ void menu_run(Node** head) {
                 if (!input_read_password(password, sizeof(password))) break;
 
                 Customer* logged_in = customer_authenticate(*head, tc_or_id, password);
+                memset(password, 0, sizeof(password));
                 if (logged_in != nullptr) {
                     printf("\nHos geldiniz, %s!\n", logged_in->name);
                     menu_customer_dashboard(head, logged_in);

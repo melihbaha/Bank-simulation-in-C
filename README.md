@@ -11,9 +11,13 @@
   - **TR IBAN Doğrulama & Üretim:** ISO 7064 **MOD-97** algoritması ile 26 haneli TR IBAN doğrulaması (`iban_validate`) ve otomatik IBAN üretimi (`iban_generate`).
   - **T.C. Kimlik No Doğrulaması:** 10. ve 11. hane kontrol basamaklarını denetleyen resmi algoritma (`tc_validate`).
   - **Tarih, Telefon, İsim ve Hesap Kontrolleri:** Artık yıl (leap year) destekli doğum tarihi, alan kodu ve telefon numarası doğrulamaları.
-- **Güvenlik ve Kimlik Doğrulama ([`customer.c`](src/customer.c)):**
-  - Şifreler düz metin yerine **128-bit FNV-1a + Salt** (`$CBH$...`) formatında hash'lenerek saklanır.
-  - T.C. Kimlik Numarası veya Müşteri ID ile oturum açma (`customer_authenticate`).
+- **Güvenlik ve Kimlik Doğrulama ([`customer.c`](src/customer.c), [`input.c`](src/input.c)):**
+  - **Maskeli Şifre Girişi:** Konsolda şifre yazılırken karakterler ekranda açık görünmez, `*` ile maskelenir (`_getch`).
+  - **128-bit FNV-1a + Salt:** Şifreler düz metin yerine dual-lane hash (`$CBH$...`) ile saklanır.
+  - **Zamanlama Saldırısı Koruması (Constant-time Comparison):** Şifre karşılaştırmalarında `secure_str_equals` ile yan kanal (side-channel timing) saldırıları engellenir.
+  - **Güvenli Bellek Temizleme (Memory Scrubbing):** Bellekten silinen düğümler ve şifre geçici tamponları `secure_zero_memory` ile sıfırlanarak RAM sızıntıları önlenir.
+  - **Aritmetik Taşma ve Enjeksiyon Koruması:** Döviz dönüşümlerinde `UINT64_MAX` taşma denetimi ve işlem geçmişinde log injection sanitizasyonu yapılır.
+  - **Atomik Dosya Kaydı:** Veritabanı yazılırken geçici dosyaya (`.tmp`) yazılıp atomik olarak değiştirilir; elektrik kesintisi veya ani kapanmalarda veritabanı bozulmaz.
 - **Çekirdek Bankacılık İşlemleri ([`bank.c`](src/bank.c)):**
   - Para Yatırma (`bank_deposit`) ve Para Çekme (`bank_withdraw`)
   - IBAN ile Havale / EFT (`bank_transfer` — farklı döviz cinsine sahip hesaplar arasında otomatik kur dönüşümü destekli)

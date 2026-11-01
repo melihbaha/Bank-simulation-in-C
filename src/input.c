@@ -8,6 +8,11 @@
 #include <limits.h>
 #include "input.h"
 
+#ifdef _WIN32
+#include <conio.h>
+#include <io.h>
+#endif
+
 char* input_get_string(void) {
     char buffer[1024];
 
@@ -57,8 +62,48 @@ bool input_read_string(char* out_buf, size_t buf_size) {
 }
 
 bool input_read_password(char* out_buf, size_t buf_size) {
+    if (out_buf == nullptr || buf_size < 2) return false;
+
+#ifdef _WIN32
+    if (_isatty(_fileno(stdin))) {
+        size_t idx = 0;
+        while (true) {
+            int ch = _getch();
+            if (ch == 0 || ch == 0xE0) {
+                (void)_getch();
+                continue;
+            }
+            if (ch == '\r' || ch == '\n') {
+                putchar('\n');
+                fflush(stdout);
+                break;
+            } else if (ch == '\b') {
+                if (idx > 0) {
+                    idx--;
+                    out_buf[idx] = '\0';
+                    printf("\b \b");
+                    fflush(stdout);
+                }
+            } else if (ch == 3) { // Ctrl+C
+                putchar('\n');
+                out_buf[0] = '\0';
+                return false;
+            } else if (ch >= 32 && ch <= 126) {
+                if (idx + 1 < buf_size) {
+                    out_buf[idx++] = (char)ch;
+                    putchar('*');
+                    fflush(stdout);
+                }
+            }
+        }
+        out_buf[idx] = '\0';
+        return true;
+    }
+#endif
+
     return input_read_string(out_buf, buf_size);
 }
+
 
 
 // ============================================================================

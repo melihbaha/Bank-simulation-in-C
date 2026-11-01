@@ -117,12 +117,17 @@ CbankResult name_validate(const char* name) {
     if (name[0] == '\0') return CBANK_ERR_EMPTY;
 
     size_t len = strlen(name);
-
     if (len >= CUSTOMER_NAME_LEN) return CBANK_ERR_LENGTH;
 
+    bool has_printable = false;
     for (size_t i = 0; i < len; i++) {
-        if (isdigit((unsigned char)name[i])) return CBANK_ERR_NAME;
+        unsigned char ch = (unsigned char)name[i];
+        if (iscntrl(ch)) return CBANK_ERR_FORMAT;
+        if (isdigit(ch)) return CBANK_ERR_NAME;
+        if (!isspace(ch)) has_printable = true;
     }
+
+    if (!has_printable) return CBANK_ERR_EMPTY;
 
     return CBANK_OK;
 }
@@ -177,8 +182,7 @@ CbankResult password_validate(const char* password) {
     if (password[0] == '\0') return CBANK_ERR_EMPTY;
     
     size_t len = strlen(password);
-
-    if (len >= CUSTOMER_PASSWORD_LEN) return CBANK_ERR_LENGTH;
+    if (len < 4 || len >= CUSTOMER_PASSWORD_LEN) return CBANK_ERR_LENGTH;
 
     return CBANK_OK;
 }

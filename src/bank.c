@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <ctype.h>
 
 enum {
     MAX_MEMORY_TRANSACTIONS = 512
@@ -25,18 +26,30 @@ const char* bank_transaction_type_name(TransactionType type) {
 }
 
 void bank_log_transaction(uint32_t customer_id, TransactionType type, uint64_t amount, Currency currency, const char* details) {
+    char clean_details[64];
+    clean_details[0] = '\0';
+
+    if (details != nullptr) {
+        size_t dlen = 0;
+        for (size_t i = 0; details[i] != '\0' && dlen + 1 < sizeof(clean_details); ++i) {
+            unsigned char ch = (unsigned char)details[i];
+            if (ch == '\n' || ch == '\r' || ch == '|' || iscntrl(ch)) {
+                clean_details[dlen++] = ' ';
+            } else {
+                clean_details[dlen++] = (char)ch;
+            }
+        }
+        clean_details[dlen] = '\0';
+    }
+
     if (s_transaction_count < MAX_MEMORY_TRANSACTIONS) {
         Transaction* tx = &s_transactions[s_transaction_count++];
         tx->customer_id = customer_id;
         tx->type = type;
         tx->amount = amount;
         tx->currency = currency;
-        if (details != nullptr) {
-            strncpy(tx->details, details, sizeof(tx->details) - 1);
-            tx->details[sizeof(tx->details) - 1] = '\0';
-        } else {
-            tx->details[0] = '\0';
-        }
+        strncpy(tx->details, clean_details, sizeof(tx->details) - 1);
+        tx->details[sizeof(tx->details) - 1] = '\0';
     }
 
     FILE* fp = fopen(CBANK_DEFAULT_TX_FILE, "a");
@@ -46,7 +59,7 @@ void bank_log_transaction(uint32_t customer_id, TransactionType type, uint64_t a
                 bank_transaction_type_name(type),
                 amount,
                 currency_name(currency),
-                details != nullptr ? details : "-");
+                clean_details[0] != '\0' ? clean_details : "-");
         fclose(fp);
     }
 }
@@ -109,6 +122,7 @@ CbankResult bank_transfer(Node* head, Customer* sender, const char* target_iban,
 
     Customer* receiver = customer_list_find_by_iban(head, target_iban);
     if (receiver == nullptr) return CBANK_ERR_NOT_FOUND;
+    if (receiver->customer_id == sender->customer_id) return CBANK_ERR_DUPLICATE;
 
     uint64_t credited_amount = currency_convert(amount, sender->currency, receiver->currency);
     if (credited_amount == 0) return CBANK_ERR_INVALID_AMOUNT;
