@@ -108,3 +108,16 @@ CbankResult customer_set_customer_id(Customer* customer, const uint32_t customer
 
     return CBANK_OK;
 }
+
+CbankResult customer_set_account_number(Customer* customer, const uint64_t account_number) {
+    if (customer == nullptr || account_number == 0) return CBANK_ERR_NULL;
+
+    CbankResult is_valid = account_number_validate(account_number);
+    if (is_valid != CBANK_OK) {
+        return is_valid;
+    }
+
+    customer->account_number = account_number;
+
+    return CBANK_OK;
+}
