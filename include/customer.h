@@ -73,3 +73,25 @@ CbankResult customer_set_account_type(Customer* customer, const AccountType acco
 CbankResult customer_set_birthday(Customer* customer, const Birthday birthday);
 CbankResult customer_set_phone(Customer* customer, const Phone phone);
 CbankResult customer_set_currency(Customer* customer, const Currency currency);
+
+// Password Hashing & Authentication
+CbankResult password_hash(const char* raw_password, char* out_hash, size_t out_size);
+CbankResult customer_set_password_hashed(Customer* customer, const char* raw_password);
+bool customer_verify_password(const Customer* customer, const char* raw_password);
+Customer* customer_authenticate(Node* head, const char* tc_or_id, const char* raw_password);
+
+// Linked List Operations
+CbankResult customer_list_add(Node** head, const Customer* customer);
+Customer* customer_list_find_by_tc(Node* head, const char* tc);
+Customer* customer_list_find_by_id(Node* head, uint32_t customer_id);
+Customer* customer_list_find_by_iban(Node* head, const char* iban);
+Customer* customer_list_find_by_account(Node* head, uint64_t account_number);
+CbankResult customer_list_remove_by_id(Node** head, uint32_t customer_id);
+void customer_list_free(Node** head);
+size_t customer_list_count(const Node* head);
+uint32_t customer_next_id(const Node* head);
+uint64_t customer_next_account_number(const Node* head);
+
+// Persistence (Save / Load)
+CbankResult customer_list_save(const Node* head, const char* filepath);
+CbankResult customer_list_load(Node** head, const char* filepath);

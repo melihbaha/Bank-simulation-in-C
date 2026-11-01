@@ -1,7 +1,8 @@
 #pragma once
 
 #include "error.h"
-#include "stdint.h"
+#include <stdint.h>
+#include <stddef.h>
 #include "customer.h"
 
 enum {
@@ -12,7 +13,9 @@ enum {
     IBAN_RESERVE_INDEX = 9     // TR reserved digit, always '0'
 };
 
+static const uint64_t ACCOUNT_NUMBER_MAX = 9999999999999999ULL; // 16-digit TR IBAN account number limit
 
+CbankResult iban_generate(uint64_t account_number, char* out_iban, size_t out_size);
 CbankResult iban_validate(const char* iban);
 CbankResult name_validate(const char* name);
 CbankResult tc_validate(const char* tc);

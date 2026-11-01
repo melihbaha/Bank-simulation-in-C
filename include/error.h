@@ -17,8 +17,15 @@ typedef enum {
     CBANK_ERR_LAST_DIGIT,
     CBANK_ERR_LAST_TWO_DIGIT,
     CBANK_ERR_RESERVE_DIGIT,
+    CBANK_ERR_INSUFFICIENT_BALANCE,
+    CBANK_ERR_INVALID_AMOUNT,
+    CBANK_ERR_AUTH,
+    CBANK_ERR_HAS_BALANCE_OR_DEBT,
+    CBANK_ERR_IO,
+    CBANK_ERR_ALLOC,
     CBANK_ERR_COUNT
 } CbankResult;
 
 
 const char* cbank_errors(CbankResult error);
+const char* cbank_error_message(CbankResult error);

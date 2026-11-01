@@ -12,3 +12,5 @@ Makefile
 *.exe
 *.pdb
 *.obj
+*.dat
+*.log

@@ -6,6 +6,7 @@
 #include <inttypes.h>
 #include <errno.h>
 #include <limits.h>
+#include "input.h"
 
 char* input_get_string(void) {
     char buffer[1024];
@@ -14,6 +15,10 @@ char* input_get_string(void) {
         char* p = strchr(buffer, '\n');
         if (p != nullptr) {
             *p = '\0';
+            size_t len = strlen(buffer);
+            if (len > 0 && buffer[len - 1] == '\r') {
+                buffer[len - 1] = '\0';
+            }
         } else {
             int c;
             while ((c = getchar()) != EOF && c != '\n');
@@ -29,6 +34,32 @@ char* input_get_string(void) {
     }
     return nullptr;
 }
+
+bool input_read_string(char* out_buf, size_t buf_size) {
+    if (out_buf == nullptr || buf_size == 0) return false;
+
+    char* str = input_get_string();
+    if (str == nullptr) {
+        out_buf[0] = '\0';
+        return false;
+    }
+
+    size_t len = strlen(str);
+    if (len >= buf_size) {
+        free(str);
+        out_buf[0] = '\0';
+        return false;
+    }
+
+    memcpy(out_buf, str, len + 1);
+    free(str);
+    return true;
+}
+
+bool input_read_password(char* out_buf, size_t buf_size) {
+    return input_read_string(out_buf, buf_size);
+}
+
 
 // ============================================================================
 // DÜZELTME: Bütün parametrelerin tipleri eksiksiz tanımlandı

@@ -1,8 +1,11 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
-char* input_get_string();
+char* input_get_string(void);
+bool input_read_string(char* out_buf, size_t buf_size);
+bool input_read_password(char* out_buf, size_t buf_size);
 bool input_get_uint8_t(uint8_t* out_val);
 bool input_get_uint16_t(uint16_t* out_val);
 bool input_get_uint32_t(uint32_t* out_val);
